@@ -3,4 +3,21 @@
     <color name="colorPrimary">#6200EE</color>
     <color name="colorPrimaryDark">#3700B3</color>
     <color name="colorAccent">#03DAC5</color>
+
+    <!-- Custom Navigation View Colors -->
+    <color name="navigation_primary_background">#FEFFFF</color>
+    <color name="navigation_secondary_background">#4164FB</color>
+    <color name="navigation_primary_text">#4164FB</color>
+    <color name="navigation_secondary_text">#000000</color>
+    <color name="navigation_accent">#4164FB</color>
+    <color name="navigation_divider">#263D56</color>
+    <color name="navigation_progress_bar_background">#FEFFFF</color>
+    <color name="navigation_progress_bar">#4164FB</color>
+
+    <color name="navigation_instruction_view_primary_background">#FEFFFF</color>
+    <color name="navigation_instruction_view_secondary_background">#4164FB</color>
+    <color name="navigation_instruction_list_view_background">#FEFFFF</color>
+    <color name="navigation_instruction_view_primary_text">#263D56</color>
+    <color name="navigation_instruction_view_secondary_text">#929EAB</color>
+
 </resources>
