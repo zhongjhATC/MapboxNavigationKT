@@ -68,4 +68,41 @@
         <item name="instructionViewAlertViewStyle">@style/CustomAlertView</item>
     </style>
 
+    <style name="CustomManeuverView">
+        <!-- Primary color for the turn arrow icons -->
+        <item name="maneuverViewPrimaryColor">
+            @color/navigation_maneuver_view_primary
+        </item>
+        <!-- Secondary color for the turn arrow icons (e.g. the line segment that forks off) -->
+        <item name="maneuverViewSecondaryColor">
+            @color/navigation_maneuver_view_secondary
+        </item>
+    </style>
+
+    <style name="CustomFeedbackButton">
+        <!-- Feedback button background color -->
+        <item name="feedbackButtonPrimaryColor">@color/navigation_primary_background</item>
+        <!-- Feedback icon tint color -->
+        <item name="feedbackButtonSecondaryColor">@color/navigation_secondary_background</item>
+    </style>
+
+    <style name="CustomSoundButton">
+        <!-- Sound button background color -->
+        <item name="soundButtonPrimaryColor">@color/navigation_primary_background</item>
+        <!-- Sound button tint color -->
+        <item name="soundButtonSecondaryColor">@color/navigation_secondary_background</item>
+    </style>
+
+    <style name="CustomAlertView">
+        <!-- Alert view background color -->
+        <item name="alertViewBackgroundColor">@color/navigation_primary_background</item>
+        <!-- Alert view progress bar background color -->
+        <item name="alertViewProgressBarBackgroundColor">@color/navigation_progress_bar_background
+        </item>
+        <!-- Alert view progress bar color -->
+        <item name="alertViewProgressBarColor">@color/navigation_progress_bar</item>
+        <!-- Alert view message text color -->
+        <item name="alertViewTextColor">@color/navigation_instruction_view_primary_text</item>
+    </style>
+
 </resources>

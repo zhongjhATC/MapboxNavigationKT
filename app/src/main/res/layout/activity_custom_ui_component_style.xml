@@ -30,7 +30,7 @@
         android:layout_height="wrap_content"
         app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior" />
 
-    <!-- 干嘛的 -->
+    <!-- 用于在导航过程中根据用户位置重新激活 -->
     <com.mapbox.navigation.ui.RecenterButton
         android:id="@+id/recenterBtn"
         style="@style/CustomRecenterButton"

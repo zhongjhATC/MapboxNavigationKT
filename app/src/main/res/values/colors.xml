@@ -20,4 +20,7 @@
     <color name="navigation_instruction_view_primary_text">#263D56</color>
     <color name="navigation_instruction_view_secondary_text">#929EAB</color>
 
+    <color name="navigation_maneuver_view_primary">#4164FB</color>
+    <color name="navigation_maneuver_view_secondary">@android:color/holo_blue_light</color>
+
 </resources>
