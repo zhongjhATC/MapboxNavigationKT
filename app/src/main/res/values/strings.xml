@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">MapboxNavigationKT</string>
     <string name="mapbox_access_token">sk.eyJ1IjoiYWFhdHR0Y2NjYyIsImEiOiJja2gxczB6MG0wYXQ2MnhuYXNoMDBjcjRsIn0.pcT2N64Tw9DWGp2yqkOl8Q</string>
+
+    <string name="simulate_route_key" translatable="false">simulate_route</string>
+    <string name="msg_long_press_map_to_place_waypoint">在地图上长按以放置一个路点</string>
 </resources>

@@ -45,6 +45,11 @@ dependencies {
 
 
     implementation "com.mapbox.navigation:ui:1.1.0"
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-sdk:9.5.0'
+
+
+    implementation "com.squareup.okhttp3:okhttp:3.12.10"
+    implementation "com.squareup.okhttp3:logging-interceptor:3.12.10"
 
     implementation "com.jakewharton.timber:timber:4.7.1"
 

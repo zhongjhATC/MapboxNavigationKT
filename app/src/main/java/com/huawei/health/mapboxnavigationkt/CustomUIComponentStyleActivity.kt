@@ -4,7 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.preference.PreferenceManager
+import android.util.Log
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.ImageButton
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
@@ -13,15 +16,20 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.snackbar.Snackbar
 import com.mapbox.android.core.location.LocationEngine
+import com.mapbox.android.core.location.LocationEngineCallback
 import com.mapbox.android.core.location.LocationEngineProvider
+import com.mapbox.android.core.location.LocationEngineResult
 import com.mapbox.api.directions.v5.DirectionsCriteria
+import com.mapbox.api.directions.v5.models.BannerInstructions
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
+import com.mapbox.api.directions.v5.models.VoiceInstructions
 import com.mapbox.mapboxsdk.Mapbox
 import com.mapbox.mapboxsdk.camera.CameraUpdateFactory
 import com.mapbox.mapboxsdk.geometry.LatLng
 import com.mapbox.mapboxsdk.location.LocationComponent
 import com.mapbox.mapboxsdk.location.LocationComponentActivationOptions
+import com.mapbox.mapboxsdk.location.OnCameraTrackingChangedListener
 import com.mapbox.mapboxsdk.location.modes.CameraMode
 import com.mapbox.mapboxsdk.location.modes.RenderMode
 import com.mapbox.mapboxsdk.maps.MapboxMap
@@ -29,12 +37,14 @@ import com.mapbox.mapboxsdk.maps.OnMapReadyCallback
 import com.mapbox.mapboxsdk.maps.Style
 import com.mapbox.navigation.base.internal.extensions.applyDefaultParams
 import com.mapbox.navigation.base.internal.extensions.coordinates
+import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.replay.MapboxReplayer
 import com.mapbox.navigation.core.replay.ReplayLocationEngine
 import com.mapbox.navigation.core.replay.route.ReplayProgressObserver
 import com.mapbox.navigation.core.telemetry.events.FeedbackEvent
+import com.mapbox.navigation.core.trip.session.*
 import com.mapbox.navigation.ui.NavigationButton
 import com.mapbox.navigation.ui.NavigationConstants
 import com.mapbox.navigation.ui.SoundButton
@@ -46,15 +56,12 @@ import com.mapbox.navigation.ui.feedback.FeedbackItem
 import com.mapbox.navigation.ui.instruction.NavigationAlertView
 import com.mapbox.navigation.ui.internal.utils.ViewUtils
 import com.mapbox.navigation.ui.map.NavigationMapboxMap
+import com.mapbox.navigation.ui.map.OnWayNameChangedListener
 import com.mapbox.navigation.ui.summary.SummaryBottomSheet
 import com.mapbox.navigation.ui.voice.NavigationSpeechPlayer
-import com.mapbox.navigation.ui.voice.SpeechPlayerProvider
-import com.mapbox.navigation.ui.voice.VoiceInstructionLoader
 import kotlinx.android.synthetic.main.activity_custom_ui_component_style.*
-import okhttp3.Cache
 import timber.log.Timber
-import java.io.File
-import java.util.*
+import java.lang.ref.WeakReference
 
 /**
  * 自定义的导航ui
@@ -62,7 +69,8 @@ import java.util.*
 class CustomUIComponentStyleActivity :
     AppCompatActivity(),
     OnMapReadyCallback,
-    FeedbackBottomSheetListener {
+    FeedbackBottomSheetListener,
+    OnWayNameChangedListener {
 
     private val routeOverviewPadding by lazy { buildRouteOverviewPadding() }
 
@@ -90,8 +98,10 @@ class CustomUIComponentStyleActivity :
         Mapbox.getInstance(applicationContext, getString(R.string.mapbox_access_token))
         setContentView(R.layout.activity_custom_ui_component_style)
         initViews()
+
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync(this)
+
         initNavigation()
         initializeSpeechPlayer()
     }
@@ -126,23 +136,40 @@ class CustomUIComponentStyleActivity :
         mapView.onSaveInstanceState(outState)
     }
 
+    @SuppressLint("MissingPermission")
     override fun onMapReady(mapboxMap: MapboxMap) {
         Timber.d("onMapReady")
         // 初始化并且设置zoom
         this.mapboxMap = mapboxMap
         mapboxMap.moveCamera(CameraUpdateFactory.zoomTo(15.0))
 
+//        // 设置数值
+//        var destinationNew = LatLng(22.539662312708813, 114.07430708793231)
+//        destination = destinationNew
+//        locationComponent?.lastKnownLocation?.let { originLocation ->
+//            mapboxNavigation.requestRoutes(
+//                RouteOptions.builder().applyDefaultParams()
+//                    .accessToken(Utils.getMapboxAccessToken(applicationContext))
+//                    .coordinates(originLocation.toPoint(), null, destinationNew.toPoint())
+//                    .alternatives(true)
+//                    .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
+//                    .build(),
+//                routesReqCallback
+//            )
+//        }
+
         // 长按事件
         mapboxMap.addOnMapLongClickListener { latLng ->
-            Timber.d("onMapLongClickListener position=%s", latLng)
-            destination = latLng
-            locationComponent?.lastKnownLocation?.let { location ->  }
+            Log.d("onMapLongClickListener", latLng.toString())
+            var destinationNew = LatLng(22.539662312708813, 114.07430708793231)
+//            Timber.d("onMapLongClickListener position=%s", latLng)
+            destination = destinationNew
 
             locationComponent?.lastKnownLocation?.let { originLocation ->
                 mapboxNavigation.requestRoutes(
                     RouteOptions.builder().applyDefaultParams()
                         .accessToken(Utils.getMapboxAccessToken(applicationContext))
-                        .coordinates(originLocation.toPoint(), null, latLng.toPoint())
+                        .coordinates(originLocation.toPoint(), null, destinationNew.toPoint())
                         .alternatives(true)
                         .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
                         .build(),
@@ -153,48 +180,82 @@ class CustomUIComponentStyleActivity :
         }
 
         // 设置样式
-        mapboxMap.setStyle(Style.MAPBOX_STREETS) {
-            // Map已设置，样式已加载。现在您可以添加数据或进行其他地图调整。
-        }
+        mapboxMap.setStyle(Style.MAPBOX_STREETS) { style ->
+            locationComponent = mapboxMap.locationComponent.apply {
+                activateLocationComponent(
+                    LocationComponentActivationOptions.builder(
+                        this@CustomUIComponentStyleActivity,
+                        style
+                    ).build()
+                )
+                cameraMode = CameraMode.TRACKING
+                isLocationComponentEnabled = true
+            }
 
-//        mapboxMap.setStyle(Style.MAPBOX_STREETS) { style ->
-//            locationComponent = mapboxMap.locationComponent.apply {
-//                activateLocationComponent(
-//                    LocationComponentActivationOptions.builder(
-//                        this@CustomUIComponentStyleActivity,
-//                        style
-//                    ).build()
-//                )
-//                cameraMode = CameraMode.TRACKING
-//                isLocationComponentEnabled = true
-//            }
-//
-//            navigationMapboxMap = NavigationMapboxMap.Builder(mapView, mapboxMap, this)
-//                .vanishRouteLineEnabled(true)
-//                .build().apply {
-//                    addOnCameraTrackingChangedListener(cameraTrackingChangedListener)
-//                    addProgressChangeListener(mapboxNavigation)
-//                    setCamera(DynamicCamera(mapboxMap))
-//                }
-//
-//            if (shouldSimulateRoute()) {
-//                mapboxNavigation
-//                    .registerRouteProgressObserver(ReplayProgressObserver(mapboxReplayer))
-//                mapboxReplayer.pushRealLocation(this, 0.0)
-//                mapboxReplayer.play()
-//            }
-//            mapboxNavigation.navigationOptions.locationEngine.getLastLocation(
-//                locationListenerCallback
-//            )
-//
-//            Snackbar.make(
-//                findViewById(R.id.navigationLayout),
-//                R.string.msg_long_press_map_to_place_waypoint,
-//                Snackbar.LENGTH_SHORT
-//            ).show()
-//        }
+            navigationMapboxMap = NavigationMapboxMap(
+                mapView,
+                mapboxMap,
+                this,
+                true
+            ).apply {
+                addOnCameraTrackingChangedListener(cameraTrackingChangedListener)
+                addProgressChangeListener(mapboxNavigation)
+                setCamera(DynamicCamera(mapboxMap))
+            }
+
+            if (shouldSimulateRoute()) {
+                mapboxNavigation
+                    .registerRouteProgressObserver(ReplayProgressObserver(mapboxReplayer))
+                mapboxReplayer.pushRealLocation(this, 0.0)
+                mapboxReplayer.play()
+            }
+            mapboxNavigation.navigationOptions.locationEngine.getLastLocation(
+                locationListenerCallback
+            )
+
+            Snackbar.make(
+                findViewById(R.id.navigationLayout),
+                R.string.msg_long_press_map_to_place_waypoint,
+                Snackbar.LENGTH_SHORT
+            ).show()
+        }
     }
 
+    private val cameraTrackingChangedListener = object : OnCameraTrackingChangedListener {
+        override fun onCameraTrackingChanged(currentMode: Int) {
+        }
+
+        override fun onCameraTrackingDismissed() {
+            if (mapboxNavigation.getTripSessionState() == TripSessionState.STARTED) {
+                summaryBehavior.isHideable = true
+                summaryBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+                hideWayNameView()
+            }
+        }
+    }
+
+    private val locationListenerCallback = MyLocationEngineCallback(this)
+
+    private class MyLocationEngineCallback(activity: CustomUIComponentStyleActivity) :
+        LocationEngineCallback<LocationEngineResult> {
+
+        private val activityRef = WeakReference(activity)
+
+        override fun onSuccess(result: LocationEngineResult) {
+            result.locations.firstOrNull()?.let { location ->
+                Timber.d("location engine callback -> onSuccess location:%s", location)
+                activityRef.get()?.locationComponent?.forceLocationUpdate(location)
+            }
+        }
+
+        override fun onFailure(exception: Exception) {
+            Timber.e("location engine callback -> onFailure(%s)", exception.localizedMessage)
+        }
+    }
+
+    /**
+     * 初始化导航
+     */
     private fun initNavigation() {
         val accessToken = Utils.getMapboxAccessToken(this)
         mapboxNavigation = MapboxNavigation(
@@ -203,24 +264,24 @@ class CustomUIComponentStyleActivity :
                 .build()
         )
         mapboxNavigation.apply {
-            registerTripSessionStateObserver(tripSessionStateObserver)
-            registerRouteProgressObserver(routeProgressObserver)
-            registerBannerInstructionsObserver(bannerInstructionObserver)
-            registerVoiceInstructionsObserver(voiceInstructionsObserver)
+            registerTripSessionStateObserver(tripSessionStateObserver) // 寄存器(TripSessionStateObserver)。监视旅行会话的状态。
+            registerRouteProgressObserver(routeProgressObserver) // 寄存器(RouteProgressObserver)。只要启动旅行会话，并且有一条主要路线可用，这些更新就可用。
+            registerBannerInstructionsObserver(bannerInstructionObserver) // 寄存器(BannerInstructionsObserver)。只要SDK处于“活动指导”状态，更新就可用。SDK在每个路由步骤中只会推送这个事件一次。
+            registerVoiceInstructionsObserver(voiceInstructionsObserver) // 寄存器(VoiceInstructionsObserver)。只要SDK处于“活动指导”状态，更新就可用。SDK在每个路由步骤中只会推送这个事件一次。
         }
     }
 
     private fun initializeSpeechPlayer() {
-        val cache =
-            Cache(
-                File(application.cacheDir, InstructionViewActivity.VOICE_INSTRUCTION_CACHE),
-                10 * 1024 * 1024
-            )
-        val voiceInstructionLoader =
-            VoiceInstructionLoader(application, Mapbox.getAccessToken(), cache)
-        val speechPlayerProvider =
-            SpeechPlayerProvider(application, Locale.US.language, true, voiceInstructionLoader)
-        speechPlayer = NavigationSpeechPlayer(speechPlayerProvider)
+//        val cache =
+//            Cache(
+//                File(application.cacheDir, InstructionViewActivity.VOICE_INSTRUCTION_CACHE),
+//                10 * 1024 * 1024
+//            )
+//        val voiceInstructionLoader =
+//            VoiceInstructionLoader(application, Mapbox.getAccessToken(), cache)
+//        val speechPlayerProvider =
+//            SpeechPlayerProvider(application, Locale.US.language, true, voiceInstructionLoader)
+//        speechPlayer = NavigationSpeechPlayer(speechPlayerProvider)
     }
 
     @Suppress("DEPRECATION")
@@ -300,7 +361,6 @@ class CustomUIComponentStyleActivity :
         alertView = instructionView.retrieveAlertView().apply {
             hide()
         }
-
     }
 
     // Callbacks and Observers
@@ -490,6 +550,132 @@ class CustomUIComponentStyleActivity :
             ReplayLocationEngine(mapboxReplayer)
         } else {
             LocationEngineProvider.getBestLocationEngine(this)
+        }
+    }
+
+    private fun shouldSimulateRoute(): Boolean {
+        return PreferenceManager.getDefaultSharedPreferences(this.applicationContext)
+            .getBoolean(this.getString(R.string.simulate_route_key), false)
+    }
+
+    private fun showLogoAndAttribution() {
+        summaryBottomSheet.viewTreeObserver.addOnGlobalLayoutListener(
+            object :
+                ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    navigationMapboxMap?.retrieveMap()?.uiSettings?.apply {
+                        val bottomMargin = summaryBottomSheet.measuredHeight
+                        setLogoMargins(
+                            logoMarginLeft,
+                            logoMarginTop,
+                            logoMarginRight,
+                            bottomMargin
+                        )
+                        setAttributionMargins(
+                            attributionMarginLeft,
+                            attributionMarginTop,
+                            attributionMarginRight,
+                            bottomMargin
+                        )
+                    }
+                    summaryBottomSheet.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                }
+            }
+        )
+    }
+
+    /**
+     * 更新view
+     */
+    private fun updateViews(tripSessionState: TripSessionState) {
+        when (tripSessionState) {
+            // 当会话处于活动状态时，运行前台服务并请求并返回位置更新。
+            TripSessionState.STARTED -> {
+                startNavigation.visibility = View.GONE
+
+                summaryBottomSheet.visibility = View.VISIBLE
+                recenterBtn.hide()
+
+                instructionView.visibility = View.VISIBLE
+                feedbackButton.show()
+                instructionSoundButton.show()
+                showLogoAndAttribution()
+            }
+            // 会话不活动时的状态。
+            TripSessionState.STOPPED -> {
+                startNavigation.visibility = View.VISIBLE
+                startNavigation.isEnabled = false
+
+                summaryBottomSheet.visibility = View.GONE
+                recenterBtn.hide()
+                hideWayNameView()
+
+                instructionView.visibility = View.GONE
+                feedbackButton.hide()
+                instructionSoundButton.hide()
+            }
+        }
+    }
+
+    private fun hideWayNameView() {
+        wayNameView.updateVisibility(false)
+    }
+
+    override fun onWayNameChanged(wayName: String) {
+        wayNameView.updateWayNameText(wayName)
+        if (summaryBehavior.state == BottomSheetBehavior.STATE_HIDDEN) {
+            hideWayNameView()
+        } else {
+            showWayNameView()
+        }
+    }
+
+    /**
+     * 监视旅行会话的状态。
+     */
+    private val tripSessionStateObserver = object : TripSessionStateObserver {
+        override fun onSessionStateChanged(tripSessionState: TripSessionState) {
+            when (tripSessionState) {
+                TripSessionState.STARTED -> {
+                    updateViews(TripSessionState.STARTED)
+
+                    navigationMapboxMap
+                        ?.addOnWayNameChangedListener(this@CustomUIComponentStyleActivity)
+                    navigationMapboxMap?.updateWaynameQueryMap(true)
+                }
+                TripSessionState.STOPPED -> {
+                    updateViews(TripSessionState.STOPPED)
+
+                    if (mapboxNavigation.getRoutes().isNotEmpty()) {
+                        navigationMapboxMap?.hideRoute()
+                    }
+
+                    navigationMapboxMap
+                        ?.removeOnWayNameChangedListener(this@CustomUIComponentStyleActivity)
+                    navigationMapboxMap?.updateWaynameQueryMap(false)
+
+                    updateCameraOnNavigationStateChange(false)
+                }
+            }
+        }
+    }
+
+    private val routeProgressObserver = object : RouteProgressObserver {
+        override fun onRouteProgressChanged(routeProgress: RouteProgress) {
+            instructionView.updateDistanceWith(routeProgress)
+            summaryBottomSheet.update(routeProgress)
+        }
+    }
+
+    private val bannerInstructionObserver = object : BannerInstructionsObserver {
+        override fun onNewBannerInstructions(bannerInstructions: BannerInstructions) {
+            instructionView.updateBannerInstructionsWith(bannerInstructions)
+        }
+    }
+
+    private val voiceInstructionsObserver = object : VoiceInstructionsObserver {
+        override fun onNewVoiceInstructions(voiceInstructions: VoiceInstructions) {
+            speechPlayer.play(voiceInstructions)
         }
     }
 
