@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.preference.PreferenceManager
-import android.util.Log
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.ImageButton
@@ -35,6 +34,8 @@ import com.mapbox.mapboxsdk.location.modes.RenderMode
 import com.mapbox.mapboxsdk.maps.MapboxMap
 import com.mapbox.mapboxsdk.maps.OnMapReadyCallback
 import com.mapbox.mapboxsdk.maps.Style
+import com.mapbox.mapboxsdk.style.layers.Layer
+import com.mapbox.mapboxsdk.style.layers.PropertyFactory.textField
 import com.mapbox.navigation.base.internal.extensions.applyDefaultParams
 import com.mapbox.navigation.base.internal.extensions.coordinates
 import com.mapbox.navigation.base.trip.model.RouteProgress
@@ -59,9 +60,14 @@ import com.mapbox.navigation.ui.map.NavigationMapboxMap
 import com.mapbox.navigation.ui.map.OnWayNameChangedListener
 import com.mapbox.navigation.ui.summary.SummaryBottomSheet
 import com.mapbox.navigation.ui.voice.NavigationSpeechPlayer
+import com.mapbox.navigation.ui.voice.SpeechPlayerProvider
+import com.mapbox.navigation.ui.voice.VoiceInstructionLoader
 import kotlinx.android.synthetic.main.activity_custom_ui_component_style.*
+import okhttp3.Cache
 import timber.log.Timber
+import java.io.File
 import java.lang.ref.WeakReference
+import java.util.*
 
 /**
  * 自定义的导航ui
@@ -91,6 +97,8 @@ class CustomUIComponentStyleActivity :
 
     private var feedbackItem: FeedbackItem? = null
     private var feedbackEncodedScreenShot: String? = null
+
+    val VOICE_INSTRUCTION_CACHE = "voice-instruction-cache"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Timber.d("onCreate savedInstanceState=%s", savedInstanceState)
@@ -143,41 +151,26 @@ class CustomUIComponentStyleActivity :
         this.mapboxMap = mapboxMap
         mapboxMap.moveCamera(CameraUpdateFactory.zoomTo(15.0))
 
-//        // 设置数值
-//        var destinationNew = LatLng(22.539662312708813, 114.07430708793231)
-//        destination = destinationNew
-//        locationComponent?.lastKnownLocation?.let { originLocation ->
-//            mapboxNavigation.requestRoutes(
-//                RouteOptions.builder().applyDefaultParams()
-//                    .accessToken(Utils.getMapboxAccessToken(applicationContext))
-//                    .coordinates(originLocation.toPoint(), null, destinationNew.toPoint())
-//                    .alternatives(true)
-//                    .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
-//                    .build(),
-//                routesReqCallback
-//            )
+//        // 长按事件
+//        mapboxMap.addOnMapLongClickListener { latLng ->
+//            Log.d("onMapLongClickListener", latLng.toString())
+//            var destinationNew = LatLng(22.539662312708813, 114.07430708793231)
+////            Timber.d("onMapLongClickListener position=%s", latLng)
+//            destination = destinationNew
+//
+//            locationComponent?.lastKnownLocation?.let { originLocation ->
+//                mapboxNavigation.requestRoutes(
+//                    RouteOptions.builder().applyDefaultParams()
+//                        .accessToken(Utils.getMapboxAccessToken(applicationContext))
+//                        .coordinates(originLocation.toPoint(), null, destinationNew.toPoint())
+//                        .alternatives(true)
+//                        .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
+//                        .build(),
+//                    routesReqCallback
+//                )
+//            }
+//            true
 //        }
-
-        // 长按事件
-        mapboxMap.addOnMapLongClickListener { latLng ->
-            Log.d("onMapLongClickListener", latLng.toString())
-            var destinationNew = LatLng(22.539662312708813, 114.07430708793231)
-//            Timber.d("onMapLongClickListener position=%s", latLng)
-            destination = destinationNew
-
-            locationComponent?.lastKnownLocation?.let { originLocation ->
-                mapboxNavigation.requestRoutes(
-                    RouteOptions.builder().applyDefaultParams()
-                        .accessToken(Utils.getMapboxAccessToken(applicationContext))
-                        .coordinates(originLocation.toPoint(), null, destinationNew.toPoint())
-                        .alternatives(true)
-                        .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
-                        .build(),
-                    routesReqCallback
-                )
-            }
-            true
-        }
 
         // 设置样式
         mapboxMap.setStyle(Style.MAPBOX_STREETS) { style ->
@@ -218,6 +211,9 @@ class CustomUIComponentStyleActivity :
                 R.string.msg_long_press_map_to_place_waypoint,
                 Snackbar.LENGTH_SHORT
             ).show()
+
+            val mapText: Layer? = style.getLayer("country-label")
+            mapText?.setProperties(textField("{name_fr}"))
         }
     }
 
@@ -236,6 +232,9 @@ class CustomUIComponentStyleActivity :
 
     private val locationListenerCallback = MyLocationEngineCallback(this)
 
+    /**
+     * 获取当前位置的回调
+     */
     private class MyLocationEngineCallback(activity: CustomUIComponentStyleActivity) :
         LocationEngineCallback<LocationEngineResult> {
 
@@ -245,6 +244,27 @@ class CustomUIComponentStyleActivity :
             result.locations.firstOrNull()?.let { location ->
                 Timber.d("location engine callback -> onSuccess location:%s", location)
                 activityRef.get()?.locationComponent?.forceLocationUpdate(location)
+            }
+
+            // 设置当前地址
+            val originLocationNew = LatLng(22.5353, 114.0726)
+
+            // 设置目的地数值
+            val destinationNew = LatLng(22.539662312708813, 114.07430708793231)
+            activityRef.get()?.destination = destinationNew
+            activityRef.get()?.locationComponent?.lastKnownLocation?.let { originLocation ->
+                activityRef.get()!!.mapboxNavigation.requestRoutes(
+                    RouteOptions.builder().applyDefaultParams()
+                        .accessToken(Utils.getMapboxAccessToken(activityRef.get()!!.applicationContext))
+                        .coordinates(originLocationNew.toPoint(), null, destinationNew.toPoint())
+                        .alternatives(true)
+                        .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
+                        .steps(true)
+                        .language("zh")
+                        .bannerInstructions(true)
+                        .build(),
+                    activityRef.get()?.routesReqCallback
+                )
             }
         }
 
@@ -268,20 +288,22 @@ class CustomUIComponentStyleActivity :
             registerRouteProgressObserver(routeProgressObserver) // 寄存器(RouteProgressObserver)。只要启动旅行会话，并且有一条主要路线可用，这些更新就可用。
             registerBannerInstructionsObserver(bannerInstructionObserver) // 寄存器(BannerInstructionsObserver)。只要SDK处于“活动指导”状态，更新就可用。SDK在每个路由步骤中只会推送这个事件一次。
             registerVoiceInstructionsObserver(voiceInstructionsObserver) // 寄存器(VoiceInstructionsObserver)。只要SDK处于“活动指导”状态，更新就可用。SDK在每个路由步骤中只会推送这个事件一次。
+
+
         }
     }
 
     private fun initializeSpeechPlayer() {
-//        val cache =
-//            Cache(
-//                File(application.cacheDir, InstructionViewActivity.VOICE_INSTRUCTION_CACHE),
-//                10 * 1024 * 1024
-//            )
-//        val voiceInstructionLoader =
-//            VoiceInstructionLoader(application, Mapbox.getAccessToken(), cache)
-//        val speechPlayerProvider =
-//            SpeechPlayerProvider(application, Locale.US.language, true, voiceInstructionLoader)
-//        speechPlayer = NavigationSpeechPlayer(speechPlayerProvider)
+        val cache =
+            Cache(
+                File(application.cacheDir, VOICE_INSTRUCTION_CACHE),
+                10 * 1024 * 1024
+            )
+        val voiceInstructionLoader =
+            VoiceInstructionLoader(application, Mapbox.getAccessToken(), cache)
+        val speechPlayerProvider =
+            SpeechPlayerProvider(application, Locale.CANADA.language, true, voiceInstructionLoader)
+        speechPlayer = NavigationSpeechPlayer(speechPlayerProvider)
     }
 
     @Suppress("DEPRECATION")
