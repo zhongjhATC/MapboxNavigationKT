@@ -34,8 +34,9 @@ import com.mapbox.mapboxsdk.location.modes.RenderMode
 import com.mapbox.mapboxsdk.maps.MapboxMap
 import com.mapbox.mapboxsdk.maps.OnMapReadyCallback
 import com.mapbox.mapboxsdk.maps.Style
-import com.mapbox.mapboxsdk.style.layers.Layer
+import com.mapbox.mapboxsdk.plugins.china.constants.ChinaStyle
 import com.mapbox.mapboxsdk.style.layers.PropertyFactory.textField
+import com.mapbox.mapboxsdk.style.layers.SymbolLayer
 import com.mapbox.navigation.base.internal.extensions.applyDefaultParams
 import com.mapbox.navigation.base.internal.extensions.coordinates
 import com.mapbox.navigation.base.trip.model.RouteProgress
@@ -151,29 +152,9 @@ class CustomUIComponentStyleActivity :
         this.mapboxMap = mapboxMap
         mapboxMap.moveCamera(CameraUpdateFactory.zoomTo(15.0))
 
-//        // 长按事件
-//        mapboxMap.addOnMapLongClickListener { latLng ->
-//            Log.d("onMapLongClickListener", latLng.toString())
-//            var destinationNew = LatLng(22.539662312708813, 114.07430708793231)
-////            Timber.d("onMapLongClickListener position=%s", latLng)
-//            destination = destinationNew
-//
-//            locationComponent?.lastKnownLocation?.let { originLocation ->
-//                mapboxNavigation.requestRoutes(
-//                    RouteOptions.builder().applyDefaultParams()
-//                        .accessToken(Utils.getMapboxAccessToken(applicationContext))
-//                        .coordinates(originLocation.toPoint(), null, destinationNew.toPoint())
-//                        .alternatives(true)
-//                        .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
-//                        .build(),
-//                    routesReqCallback
-//                )
-//            }
-//            true
-//        }
-
         // 设置样式
-        mapboxMap.setStyle(Style.MAPBOX_STREETS) { style ->
+        mapboxMap.setStyle(
+            Style.Builder().fromUri(ChinaStyle.MAPBOX_STREETS_CHINESE)) { style ->
             locationComponent = mapboxMap.locationComponent.apply {
                 activateLocationComponent(
                     LocationComponentActivationOptions.builder(
@@ -211,9 +192,6 @@ class CustomUIComponentStyleActivity :
                 R.string.msg_long_press_map_to_place_waypoint,
                 Snackbar.LENGTH_SHORT
             ).show()
-
-            val mapText: Layer? = style.getLayer("country-label")
-            mapText?.setProperties(textField("{name_fr}"))
         }
     }
 
@@ -259,8 +237,6 @@ class CustomUIComponentStyleActivity :
                         .coordinates(originLocationNew.toPoint(), null, destinationNew.toPoint())
                         .alternatives(true)
                         .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
-                        .steps(true)
-                        .language("zh")
                         .bannerInstructions(true)
                         .build(),
                     activityRef.get()?.routesReqCallback
@@ -568,11 +544,11 @@ class CustomUIComponentStyleActivity :
      * 对于其他测试，使用了一个真实的位置引擎。
      */
     private fun getLocationEngine(): LocationEngine {
-        return if (shouldSimulateRoute()) {
-            ReplayLocationEngine(mapboxReplayer)
-        } else {
-            LocationEngineProvider.getBestLocationEngine(this)
-        }
+//        return if (shouldSimulateRoute()) {
+//            ReplayLocationEngine(mapboxReplayer)
+//        } else {
+            return LocationEngineProvider.getBestLocationEngine(this)
+//        }
     }
 
     private fun shouldSimulateRoute(): Boolean {

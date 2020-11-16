@@ -45,6 +45,8 @@ dependencies {
 
 
     implementation "com.mapbox.navigation:ui:1.1.0"
+    // China plugin dependency
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-plugin-china:2.4.0'
     implementation 'com.mapbox.mapboxsdk:mapbox-android-sdk:9.5.0'
 
 
